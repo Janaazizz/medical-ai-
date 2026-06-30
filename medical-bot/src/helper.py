@@ -26,12 +26,10 @@ def load_pdf_file(data: str) -> List:
     """
     Recursively load every ``*.pdf`` inside *data* directory and
     return a flat list of LangChain ``Document`` objects.
-
     Parameters
     ----------
     data : str
         Path to the folder that contains your PDF source files.
-
     Returns
     -------
     List[Document]
@@ -49,12 +47,10 @@ def text_split(extracted_data: List) -> List:
     """
     Split a list of ``Document`` objects into smaller, overlapping
     text chunks suitable for embedding.
-
     Parameters
     ----------
     extracted_data : List[Document]
         Documents produced by :func:`load_pdf_file`.
-
     Returns
     -------
     List[Document]
@@ -71,10 +67,8 @@ def text_split(extracted_data: List) -> List:
 def download_hugging_face_embeddings() -> HuggingFaceEmbeddings:
     """
     Instantiate the HuggingFace sentence-transformer embedding model.
-
     Model  : sentence-transformers/all-MiniLM-L6-v2
     Output : 384-dimensional dense vectors
-
     Returns
     -------
     HuggingFaceEmbeddings
@@ -98,6 +92,6 @@ def load_gemini_llm(api_key: str):
         model="gemini-2.5-flash",
         google_api_key=api_key.strip(),
         temperature=0.4,
-        max_tokens=500
+        max_tokens=2048
     )
     return llm
