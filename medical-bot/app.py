@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.prompts import ChatPromptTemplate
-from src.helper import download_hugging_face_embeddings, load_gemini_llm
+from helper import download_hugging_face_embeddings, load_gemini_llm
 
 # Initialize Flask with explicit static and template settings
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -26,16 +26,33 @@ docsearch = PineconeVectorStore.from_existing_index(
     index_name=INDEX_NAME,
     embedding=embeddings
 )
+
 retriever = docsearch.as_retriever(search_kwargs={"k": 4})
-llm = load_gemini_llm(api_key="DUMMY_KEY_FOR_GITHUB")
-# Updated prompt to handle chat history for context memory
+
+# 🟢 تم تحديث الـ API Key الجديد هنا بنجاح لفك حظر الـ Quota فوراً
+llm = load_gemini_llm(api_key="AQ.Ab8RN6KRXt830ZIerDMDSUGg0YUh-BOqbFqBMvUBFnBTkBkRoQ")
+
+# المرجع الطبي العربي المحقون برمجياً مباشرة (بدون ملفات)
+ARABIC_MEDICAL_REFERENCE = """
+=== مرجع منظمة الصحة العالمية والدليل الطبي العربي الموحد ===
+1. مؤشرات خطورة ضغط الدم والسكري (Clinical Risk Vitals):
+- المعدل الطبيعي لضغط الدم الانقباضي هو أقل من 120 ملم زئبقي. فوق 140 ملم زئبقي مع صداع يصنف كخطورة متوسطة إلى عالية (Mid to High Risk).
+- المعدل الطبيعي للسكر الصائم هو أقل من 100 ملجم/دسل. فوق 200 ملجم/دسل عشوائي مع إعياء يصنف كخطورة عالية (High Risk).
+2. بروتوكول التعامل مع الطوارئ والأعراض الحادة:
+- آلام الصدر وضيق التنفس الحاد: تصنف فوراً كـ "حالة حرجة خطيرة جداً" (High Risk) والبروتوكول الإلزامي هو التوجيه لأقرب مستشفى فوراً وعدم الانتظار.
+"""
+
+# الـ Prompt المتكامل مع فرض قاعدة اللغة الصارمة في البداية لضمان عدم الخلط
 prompt = ChatPromptTemplate.from_messages([
     ("system", (
-        "You are an expert clinical medical assistant. Synthesize a concise and accurate answer using the provided multi-source retrieved context.\n"
-        "Use the provided Chat History to understand the context of follow-up questions.\n"
-        "If you don't know the answer or the context does not contain the information, say you don't know.\n"
+        "LANGUAGE RULE: You must always reply in the EXACT same language used by the user in their input. If the user asks in English, reply in English. If they ask in Arabic, reply in Arabic. Do not switch languages based on the context text.\n\n"
+        "You are an expert clinical medical assistant operating within a Hybrid AI Clinical System (Pulse).\n"
+        "You balance quantitative data from a Predictive ML Model and semantic context from verified reference documents.\n\n"
+        "CRITICAL INSTRUCTIONS:\n"
+        "- Read the 'Patient ML Risk Assessment' context carefully. If it denotes 'High Risk', maintain an urgent, protective clinical tone.\n"
+        "- If you don't know the answer or the context is insufficient, say you don't know.\n\n"
         "CRITICAL: Always append this exact clinical disclaimer at the very end of your response on a new line: "
-        "'[DISCLAIMER: This information is derived from verified global health reference materials and is for educational purposes only. Consult a professional physician for real medical interventions.]'\n\n"
+        "'[DISCLAIMER: This information is derived from verified global health reference materials and a clinical ML risk predictor. It is for educational purposes only. Consult a professional physician for real medical interventions.]'\n\n"
         "Context:\n{context}\n\n"
         "Chat History:\n{history}"
     )),
@@ -52,7 +69,7 @@ def helper_clean_source_name(raw_source):
         return "WHO Global Health Framework"
     return "Verified Medical Reference Manual"
 
-# 1. Root Route now serves the actual Frontend Chatbot!
+# 1. Root Route
 @app.route('/', methods=['GET'])
 def home():
     return render_template('chat.html')
@@ -62,6 +79,9 @@ def home():
 def chat():
     data = request.json
     user_question = data.get("question", "")
+    
+    # سحب قراءة الـ ML Risk Score القادمة من الفرونت إند (الزرار العائم)
+    ml_risk_status = data.get("risk_status", "No instant biometric risk calculated yet.")
     
     # Extract chat history from the frontend payload
     raw_history = data.get("history", [])
@@ -83,9 +103,18 @@ def chat():
                 seen_citations.add(citation_string)
                 citations.append({"book": clean_src, "page": clean_page})
         
-        context_text = "\n\n".join(doc.page_content for doc in retrieved_docs)
+        # استخراج نصوص مراجع باينكون
+        retrieved_docs_text = "\n\n".join(doc.page_content for doc in retrieved_docs)
+        
+        # بناء الـ Context الهجين (المرجع العربي + نتيجة الـ ML + مراجع باينكون)
+        full_context = (
+            f"{ARABIC_MEDICAL_REFERENCE}\n\n"
+            f"=== Patient ML Risk Assessment ===\n{ml_risk_status}\n\n"
+            f"=== Retrieved Medical References ===\n{retrieved_docs_text}"
+        )
+        
         formatted_prompt = prompt.format_messages(
-            context=context_text, 
+            context=full_context, 
             history=formatted_history, 
             input=user_question
         )
@@ -95,7 +124,7 @@ def chat():
         response_lower = ai_response.lower()
         if "do not know" in response_lower or "don't know" in response_lower:
             citations = []
-        
+            
         return jsonify({
             "status": "success",
             "answer": ai_response,
@@ -105,5 +134,6 @@ def chat():
         print(f"[Error] {traceback.format_exc()}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# تشغيل السيرفر على البورت 7860 وتفعيل الاستقبال الخارجي على هانجينج فيس
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    app.run(host="0.0.0.0", port=7860, debug=False)
