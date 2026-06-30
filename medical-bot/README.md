@@ -50,6 +50,7 @@ Web App Framework: Flask
 Large Language Model API: Google Gemini API
 Vector Storage Database: Pinecone
 
+ ###  [Click Here to Access the Live Hosted Web App](https://jaaziz1234-medical-ai-bot.hf.space)
 Distributed cleanly under the official MIT License. See the license blocks inside the root path files for complete details.
 
 Copyright (c) 2026 jana
